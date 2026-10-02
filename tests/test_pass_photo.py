@@ -95,6 +95,16 @@ def test_compare_returns_both_dates(photos):
     assert comparison["a"]["path"] != comparison["b"]["path"]
 
 
+def test_hostile_dish_id_cannot_escape_the_photo_store(photos):
+    book, counter = photos
+    result = book.capture("../../etc/passwd")
+    assert result["path"].startswith(book.config.photo_dir)
+    assert ".." not in os.path.basename(result["path"])
+    assert os.path.exists(result["path"])
+    # the database still records what the kitchen actually called the dish
+    assert book.get(result["photo_id"])["dish_id"] == "../../etc/passwd"
+
+
 def test_no_blob_is_stored_in_the_database(photos, db):
     book, counter = photos
     book.capture("r-1")

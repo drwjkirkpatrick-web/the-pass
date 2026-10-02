@@ -100,7 +100,13 @@ class PassPhoto:
         seq = int(self.db.scalar(
             "SELECT COUNT(*) FROM dish_photos WHERE dish_id = ? AND service_date = ?",
             (dish_id, service_date))) + 1
-        path = os.path.join(target_dir, f"{service_date}_{dish_id}_{seq:02d}.jpg")
+        # NOTE: dish ids are untrusted (they can come from a menu file or a chat
+        # message). Slug them for the filename so a stray "/" or ".." can never
+        # steer the write outside the photo store. The database keeps the id
+        # exactly as given.
+        safe_id = re.sub(r"[^A-Za-z0-9._-]+", "-", str(dish_id))[:60]
+        safe_id = re.sub(r"\.{2,}", "-", safe_id).strip("-. ") or "dish"
+        path = os.path.join(target_dir, f"{service_date}_{safe_id}_{seq:02d}.jpg")
         if not os.path.exists(path):
             with open(path, "wb") as fh:
                 fh.write(b"placeholder-plate-photo")
