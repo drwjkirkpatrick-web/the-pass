@@ -212,10 +212,18 @@ class Journal:
 
     def annotate(self, note: str, service_date: Optional[str] = None,
                  author: str = "chef") -> None:
+        """Add a note, and refresh the stored journal if one exists.
+
+        WHY recompile: a note added after the nightly report was compiled used
+        to sit invisible in the notes table. The artifact must match the record.
+        """
+        service_date = service_date or self.db.today()
         self.db.execute(
             "INSERT INTO journal_notes (service_date, note, author, ts)"
             " VALUES (?,?,?,?)",
-            (service_date or self.db.today(), note, author, self.db.now()))
+            (service_date, note, author, self.db.now()))
+        if self.get(service_date) is not None:
+            self.compile_service(service_date)
 
     def notes(self, service_date: Optional[str] = None) -> List[Dict[str, Any]]:
         rows = self.db.query(
