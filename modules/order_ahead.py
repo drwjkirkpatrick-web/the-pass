@@ -54,11 +54,12 @@ class OrderAhead:
         self.inventory = inventory
 
     # -- date math ---------------------------------------------------------
-    def arrival_date(self, service_date: str) -> str:
+    def arrival_date(self, service_date: Optional[str] = None) -> str:
         """Goods must be on the shelf the day before service."""
+        service_date = service_date or self.db.today()
         return (_as_date(service_date) - timedelta(days=1)).strftime(D_FMT)
 
-    def order_by(self, supplier_id: str, service_date: str) -> str:
+    def order_by(self, supplier_id: str, service_date: Optional[str] = None) -> str:
         arrival = _as_date(self.arrival_date(service_date))
         lead = (self.deliveries.planning_lead(
                     supplier_id, self.config.delivery_safety_buffer_days)

@@ -137,13 +137,23 @@ class MenuPlanner:
                     ingredient_id=ingredient_id, name=ingredient_id, needed=needed,
                     unit=unit, on_hand=0.0, deficit=needed, reason="missing"))
                 continue
+            # NOTE: recipe lines speak grams; the pantry speaks whatever unit the
+            # delivery arrived in (often kg). Convert before comparing, or the
+            # shortfall is arithmetic fiction.
+            from modules.recipes import convert  # local import: avoid a cycle
+
+            try:
+                needed_in_unit = convert(needed, unit, ingredient.unit)
+            except ValueError:
+                needed_in_unit = needed
             on_hand = ingredient.on_hand
-            deficit = round(needed - on_hand, 4)
+            deficit = round(needed_in_unit - on_hand, 4)
             if deficit > 0:
                 reason = "below_par" if on_hand < ingredient.par_level else "insufficient"
                 shortfalls.append(Shortfall(
-                    ingredient_id=ingredient_id, name=ingredient.name, needed=needed,
-                    unit=unit, on_hand=on_hand, deficit=deficit, reason=reason))
+                    ingredient_id=ingredient_id, name=ingredient.name,
+                    needed=round(needed_in_unit, 4), unit=ingredient.unit,
+                    on_hand=on_hand, deficit=deficit, reason=reason))
             freshness = self.inventory.freshness_score(ingredient)
             if freshness["label"] in ("use first", "use soon", "expired"):
                 use_first.append({"ingredient_id": ingredient_id,
@@ -170,6 +180,23 @@ class MenuPlanner:
         if row is None:
             return None
         return ServicePlan.from_dict(json.loads(row["payload"]))
+
+    def latest_plan(self) -> Optional[ServicePlan]:
+        """Today's plan if there is one, else the next upcoming, else the last.
+
+        WHY: the chef asks "show me tonight" on the afternoon of a service whose
+        plan was written for tomorrow's date, and a strict today-only lookup
+        answers "no plan" — which is both wrong and alarming.
+        """
+        today = self.db.today()
+        row = self.db.query_one(
+            "SELECT service_date FROM service_plans WHERE service_date >= ?"
+            " ORDER BY service_date LIMIT 1", (today,))
+        if row is None:
+            row = self.db.query_one(
+                "SELECT service_date FROM service_plans WHERE service_date < ?"
+                " ORDER BY service_date DESC LIMIT 1", (today,))
+        return self.get_plan(row["service_date"]) if row else None
 
     def shortfalls(self, service_date: Optional[str] = None) -> List[Shortfall]:
         plan = self.get_plan(service_date)

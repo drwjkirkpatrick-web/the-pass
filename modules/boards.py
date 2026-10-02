@@ -117,10 +117,10 @@ class Boards:
 
         # 3. order windows closing today
         if self.order_ahead is not None and self.planner is not None:
-            plan = self.planner.get_plan()
-            shortfalls = plan.shortfalls if plan else []
-            for rec in self.order_ahead.due_today(plan.service_date if plan else None,
-                                                  shortfalls=shortfalls):
+            plan = self.planner.latest_plan()
+            for rec in (self.order_ahead.due_today(plan.service_date,
+                                                   shortfalls=plan.shortfalls)
+                        if plan is not None else []):
                 card = self._ensure_card(
                     board["id"], f"Order today: {rec.supplier_name}",
                     f"{rec.ingredient_name} {rec.qty:g} {rec.unit}; {rec.note}",
