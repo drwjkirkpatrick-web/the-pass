@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS ingredients (
   unit TEXT DEFAULT 'each', par_level REAL DEFAULT 0, on_hand REAL DEFAULT 0,
   unit_cost REAL DEFAULT 0, shelf_life_days INTEGER DEFAULT 0,
   freshness_date TEXT DEFAULT '', photo_ids TEXT DEFAULT '',
+  supplier_id TEXT DEFAULT '',
   status TEXT DEFAULT 'active', created_at TEXT DEFAULT '', updated_at TEXT DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS ingredient_drafts (

@@ -54,22 +54,23 @@ class Inventory:
             self.db.execute(
                 "INSERT INTO ingredients (id, name, category, unit, par_level,"
                 " on_hand, unit_cost, shelf_life_days, freshness_date, photo_ids,"
-                " status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " supplier_id, status, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (stored.id, stored.name, stored.category, stored.unit,
                  stored.par_level, stored.on_hand, stored.unit_cost,
                  stored.shelf_life_days, stored.freshness_date,
-                 ",".join(stored.photo_ids), stored.status, self.db.now(),
-                 self.db.now()),
+                 ",".join(stored.photo_ids), stored.supplier_id, stored.status,
+                 self.db.now(), self.db.now()),
             )
         else:
             self.db.execute(
                 "UPDATE ingredients SET name=?, category=?, unit=?, par_level=?,"
                 " on_hand=?, unit_cost=?, shelf_life_days=?, freshness_date=?,"
-                " photo_ids=?, status=?, updated_at=? WHERE id=?",
+                " photo_ids=?, supplier_id=?, status=?, updated_at=? WHERE id=?",
                 (stored.name, stored.category, stored.unit, stored.par_level,
                  stored.on_hand, stored.unit_cost, stored.shelf_life_days,
-                 stored.freshness_date, ",".join(stored.photo_ids), stored.status,
-                 self.db.now(), stored.id),
+                 stored.freshness_date, ",".join(stored.photo_ids),
+                 stored.supplier_id, stored.status, self.db.now(), stored.id),
             )
         self._announce(stored, "upsert")
         return stored
@@ -96,6 +97,14 @@ class Inventory:
         if current is None:
             return None
         return self.upsert(replace(current, par_level=par_level))
+
+    def set_supplier(self, ingredient_id: str,
+                     supplier_id: str) -> Optional[Ingredient]:
+        """Remember who this ingredient is bought from (Phase 3 groups by it)."""
+        current = self.get(ingredient_id)
+        if current is None:
+            return None
+        return self.upsert(replace(current, supplier_id=supplier_id))
 
     def flag_eighty_six(self, ingredient_id: str, source: str = "chef") -> Optional[Ingredient]:
         """Take an ingredient off the menu. Logged — the journal reads this."""

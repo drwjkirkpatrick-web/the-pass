@@ -248,11 +248,11 @@ class IngredientCurator:
     def _write_ingredient(self, ingredient: Ingredient) -> None:
         self.db.execute(
             "INSERT INTO ingredients (id, name, category, unit, par_level, on_hand,"
-            " unit_cost, shelf_life_days, freshness_date, photo_ids, status,"
-            " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " unit_cost, shelf_life_days, freshness_date, photo_ids, supplier_id,"
+            " status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (ingredient.id, ingredient.name, ingredient.category, ingredient.unit,
              ingredient.par_level, ingredient.on_hand, ingredient.unit_cost,
              ingredient.shelf_life_days, ingredient.freshness_date,
-             ",".join(ingredient.photo_ids), ingredient.status, self.db.now(),
-             self.db.now()),
+             ",".join(ingredient.photo_ids), ingredient.supplier_id,
+             ingredient.status, self.db.now(), self.db.now()),
         )

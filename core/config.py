@@ -30,6 +30,7 @@ class Config:
     temp_interval_sec: int = 300
     reminder_lead_min: int = 45
     review_lead_min: int = 120
+    delivery_safety_buffer_days: float = 0.0  # extra slack on top of p90
     # thresholds
     conf_threshold: float = 0.6
     wash_backlog_threshold: int = 3

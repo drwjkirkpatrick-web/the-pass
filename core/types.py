@@ -81,6 +81,7 @@ class Ingredient:
     shelf_life_days: int = 0
     freshness_date: str = ""
     photo_ids: List[str] = field(default_factory=list)
+    supplier_id: str = ""  # who we buy this from (Phase 3 ordering groups by it)
     status: str = "active"  # active | proposed | eighty_six
 
     def to_dict(self) -> Dict[str, Any]:
