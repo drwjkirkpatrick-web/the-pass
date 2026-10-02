@@ -80,8 +80,13 @@ class Ordering:
             order_by = ""
             if self.order_ahead is not None and supplier_id != UNASSIGNED:
                 order_by = self.order_ahead.order_by(supplier_id, service_date)
+            # the chef-facing line says how much, why, when to order, and when
+            # it lands — everything needed to trust the number at a glance
+            arrival = (self.order_ahead.arrival_date(service_date)
+                       if self.order_ahead is not None else "")
             rationale = ("; ".join(entry["reasons"]) +
                          (f"; order by {order_by}" if order_by else "") +
+                         (f"; arrives {arrival}" if arrival else "") +
                          f"; needed {qty:g} {entry['unit']}")
             grouped.setdefault(supplier_id, []).append(OrderLine(
                 ingredient_id=ingredient_id, ingredient_name=name,
