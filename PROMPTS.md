@@ -157,7 +157,7 @@ Tests: median/p90 on known fixtures, empty-history default, grade boundaries, CS
 
 The "order days in advance for day-before arrival" engine. `required_by_date(service_date, ingredient) -> date`: works backward from service_date — shelf-life check (ingredient must survive from arrival to service), supplier cutoff time, and the delay model (09): `latest_order_date = required_arrival − p90_delay(supplier)` (p90, not median — the safety margin is the point). Output per ingredient: a dated order recommendation `("supplier-X", "order by Mon Sep 29", "arrives Wed Oct 1", "service Thu Oct 2")`. `build_schedule(service_date) -> list[OrderRecommendation]` across all shortfall ingredients, grouped by supplier with their cutoff times.
 
-Tests: backward-date math with known delays (incl. weekend skip if cutoff falls on closed day — a `closed_days` set on Supplier), p90 vs median choice changes the order date, shelf-life violation pushed earlier, empty suppliers list no-op.
+Tests: backward-date math with known delays (incl. weekend skip if cutoff falls on closed day — a `closed_days` set on Supplier), p90 vs median choice changes the order date, a shelf life shorter than the lead time raises an explicit warning note (arrival stays day-before: moving it earlier would only age the product faster), empty suppliers list no-op.
 
 ---
 
@@ -444,14 +444,32 @@ Phase 8:  26 (parent) → 27, 28;  29 (parent);  30
 
 ## Progress Tracker
 
-Mark prompts as they land:
+All 30 prompts are built and committed — one commit per prompt.
 
-- [ ] 01-03 Foundation
-- [ ] 04-05 Ingredient intelligence
-- [ ] 06-08 Recipes & global DB
-- [ ] 09-12 Ordering & human review
-- [ ] 13-17 Kitchen operations
-- [ ] 18-20 Pass, review & comms
-- [ ] 21-22 Planning boards
-- [ ] 23-25 Service intelligence
-- [ ] 26-30 Integration & delivery
+| Prompts | Phase | Status |
+|---|---|---|
+| 01-03 | Foundation | built |
+| 04-05 | Ingredient intelligence | built |
+| 06-08 | Recipes & global DB | built |
+| 09-12 | Ordering & human review | built |
+| 13-17 | Kitchen operations | built |
+| 18-20 | Pass, review & comms | built |
+| 21-22 | Planning boards | built |
+| 23-25 | Service intelligence | built |
+| 26-30 | Integration & delivery | built |
+| 30 | Documentation & ops runbook | built |
+
+Every command in `docs/RUNBOOK.md` was executed against a fresh database and
+behaves as documented, including the exit codes above.
+
+**316 tests, green, offline, ~30s on a Jetson Orin Nano.**
+
+Bugs the end-to-end service day (Prompt 29) caught, and what changed:
+
+- recipe lines speak grams while the pantry speaks the delivery unit (kg) — the
+  planner now converts before comparing, or shortfalls were arithmetic fiction
+- `boards.sync()` crashed when no service plan existed for today
+- "show me tonight" only looked at today, so a plan written for tomorrow read as
+  "no plan" — `MenuPlanner.latest_plan()` now finds the relevant one
+- dish ids were used raw in photo filenames (path traversal) — now slugged
+- "86 the scallops" did not match, because cooks say "the"

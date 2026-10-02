@@ -1,74 +1,107 @@
-# The Pass — Architecture (framework level)
+# The Pass — Architecture (as built)
 
-This documents the intended architecture the 30 prompts will build. It will be
-kept current as modules land. Per-module detail lives in `PROMPTS.md`.
+Companion to `PROMPTS.md`, which holds the original build contract. This
+document describes what actually shipped.
 
-## Module graph
+## Layers
 
 ```
-core/types.py      every module imports; zero imports outward
-core/config.py     env-aware config (OPEN_GLOBAL_RECIPES_DB, photo dirs, HACCP defaults)
-core/database.py   SQLite, DDL constants, lazy connect, row_to()
-core/events.py     typed in-process EventBus (10 event types)
-core/agent.py      PassAgent: module registry, tick(), service state machine
+core/                     no project imports; everything else depends on it
+  types.py                the shared vocabulary (13 dataclasses, 7 enums)
+  config.py               every path, threshold and window; YAML optional
+  database.py             one SQLite schema (28 tables), lazy connect, row->dataclass
+  events.py               in-process event bus, 14 event types, handler isolation
+  agent.py                PassAgent: module registry, tick(), service state machine
 
-modules/
-  ingredient_vision.py   photo -> IngredientObservation (MockVisionAnalyzer)
-  inventory.py           freshness, par levels, 86 warnings
-  recipe_db.py           read-only bridge to global recipe DB (graceful when absent)
-  recipes.py             scaling, unit conversion, requirement aggregation, cost
-  menu_planner.py        service plan + shortfall list
-  deliveries.py          supplier delay history: median, p90, grades
-  order_ahead.py         backward-dated order-by recommendations (p90 + cutoff + shelf life)
-  ordering.py            draft POs with per-line rationale; export
-  review_queue.py        universal human gate: submit/approve/reject/escalate + audit
-  templog.py             cold chain zones, excursion escalation
-  reminders_boh.py       BOH reminder engine (shared ReminderEngine)
-  reminders_foh.py       FOH templates/hooks on the same engine
-  dish_counter.py        fire/plated/picked_up append-only events
-  wash_counter.py        racks in/out, backlog alerts, sanitizer log
-  pass_photo.py          plate photos chained to dish_events
-  review_app.py          Flask live review surface (score in seconds)
-  comms.py               URGENT (ack-required) / NON_URGENT (batched) line, transcripts
-  kanban.py              generic board engine (WIP limits, audit)
-  boards.py              Chef / Agent / Server-Host boards with event-driven cards
-  journal.py             nightly service journal + markdown report
-  consistency.py         drift detection across services (variance, trend)
-  michelin.py            five-criteria dashboard, evidence-cited
-main.py                 composition root; verify_wiring()
-cli.py                  argparse surface; exit code 2 = blocked by human review
-hermes_bridge.py        Telegram intent routing (never auto-approves)
+modules/                  one concern each, all constructed in main.py
+main.py                   composition root + verify_wiring()
+cli.py                    argparse surface; exit 0 / 1 / 2
+hermes_bridge.py          Telegram intent routing (report-only, never approves)
 ```
 
-## Event routing (summary)
+## Modules (22)
+
+| Phase | Module | Does |
+|---|---|---|
+| 1 | `ingredient_vision` | photos in → draft ingredient list (mock analyzer; real model is an adapter) |
+| 1 | `inventory` | on-hand, par levels, freshness scores, 86 flag + log |
+| 2 | `recipe_db` | read-only adapter over the external recipe DB, introspects its schema |
+| 2 | `recipes` | recipe book, portion scaling, unit conversion, costing, requirements |
+| 2 | `menu_planner` | service plan, shortfalls, use-first, substitution ideas |
+| 3 | `deliveries` | supplier delay history: median, p90, worst-recent, grades |
+| 3 | `order_ahead` | backward date math: service → arrival (day before) → order-by |
+| 3 | `ordering` | draft POs per supplier, every line carrying its reason |
+| 3 | `review_queue` | the human gate: approve / edit / reject / escalate, full audit |
+| 4 | `templog` | HACCP zones, breach streaks, escalation, append-only readings |
+| 4 | `reminders_boh` | the shared ReminderEngine + kitchen timers |
+| 4 | `reminders_foh` | FOH vocabulary + the 86 warning hooked to inventory events |
+| 4 | `dish_counter` | fired / plated / picked up; gaps; pace; histograms |
+| 4 | `wash_counter` | racks in/out, throughput, backlog warning, sanitizer log |
+| 5 | `pass_photo` | a photo per plate, chained to the plate event |
+| 5 | `review_app` | scoring logic + optional Flask shell (live strip, trend) |
+| 5 | `comms` | urgent (ack-required) vs non-urgent (digest) lanes, transcripts |
+| 6 | `kanban` | generic board engine: columns, WIP limits, move history |
+| 6 | `boards` | Cuisine / Operations / Hospitality, fed by live state |
+| 7 | `journal` | nightly service report; every section degrades honestly |
+| 7 | `consistency` | variance, trend, plating drift, findings, agent-board cards |
+| 7 | `michelin` | five criteria, each signal computed from records, plus focus |
+
+## Event routing
 
 | Event | Published by | Listened by |
 |---|---|---|
-| INGREDIENTS_UPDATED | inventory (05) | menu_planner, foh reminders (86), michelin |
-| DRAFT_ORDER_READY | ordering (11) | review_queue, agent board |
-| ORDER_APPROVED | review_queue (12) | agent board |
-| TEMP_EXCURSION | templog (13) | reminders (escalation), agent board |
-| REMINDER_DUE | agent tick via engines (14/15) | comms/FOH surfaces, hermes_bridge |
-| MESSAGE_URGENT | comms (20) | ack surfaces, journal |
-| DISH_PLATED | dish_counter (16) | pass_photo |
-| DISH_REVIEWED | review_app (19) | journal, consistency |
-| WASH_CYCLE_DONE | wash_counter (17) | reminders (backlog), journal |
-| SERVICE_OPEN / CLOSE | agent (03) | all engines, journal (compiles on CLOSE) |
+| `service.open` | agent tick | — (informational) |
+| `service.close` | agent tick | `boards` (close-checklist cards) |
+| `ingredients.updated` | `inventory`, `ingredient_vision` | `reminders_foh` (86 warnings) |
+| `menu.planned` | `menu_planner` | — |
+| `order.draft_ready` | `ordering` | — |
+| `order.approved` | `review_queue` | — |
+| `temp.excursion` | `templog` | — (templog raises the reminder itself) |
+| `reminder.due` | `reminders_boh`/`foh`, `review_queue` | gateway push |
+| `message.urgent` | `comms` | gateway push, repeat until acked |
+| `dish.plated` | `dish_counter` | `pass_photo` (chain) |
+| `dish.reviewed` | `review_app` | `journal`, `consistency` |
+| `wash.cycle_done` | `wash_counter` | — |
+| `wash.backlog` | `wash_counter` | — |
+| `review.pending` | `review_queue` | `boards` |
+
+`main.verify_wiring()` reports every event with no listener, and fails the
+`ok` check if a *required* listener is missing (`ingredients.updated`,
+`service.close`). Orphans are informational: an event with no consumer today is
+a hook for tomorrow, not a bug.
 
 ## The three data chains
 
-1. **Ingredient chain:** delivery photo → curated draft (04) → human approval → inventory (05) → recipe requirements (07) → shortfall (08) → dated order-by rec (10) → draft PO with rationale (11) → human approval (12) → export.
-2. **Plate chain:** fire → plated → photo (18) → live score (19) → journal (23) → drift (24) → Michelin consistency (25).
-3. **Order chain:** covers forecast → aggregated requirements → supplier delay model (09) → order-ahead schedule (10) → curated draft → review gate → sent PO (outside the system).
+1. **Ingredient chain** — delivery photo → draft → human approval → inventory →
+   recipe requirements → shortfall → order-by date → draft PO (with rationale)
+   → human approval → export.
+2. **Plate chain** — fire → plated (photographed) → picked up → scored → journal
+   → drift report → consistency criterion.
+3. **Order chain** — covers forecast → aggregated requirements → supplier p90 →
+   order-by schedule → curated drafts → review gate → purchase order text.
+
+## Human review gates
+
+Curated ingredient lists, purchase orders, and anything the agent wants to
+publish outside the kitchen. `Ordering.set_status()` raises on `APPROVED`, so the
+only route to an approved order is `ReviewQueue.approve()`. Tested at every gate
+(04, 11, 12, 19, 25, 28, 29).
 
 ## Degradation model
 
-Only `core/` (01-03) is required. Every module absent means the agent logs it and
-runs with what's present. Global recipe DB absent → local recipes only. Sensor
-absent → manual temp entry. Gateway absent → CLI + web.
+Only `core/` is required. `main.build_agent()` constructs everything else and
+logs what is missing:
 
-## Human review gates (invariant)
+| Missing | Effect |
+|---|---|
+| `OPEN_GLOBAL_RECIPES_DB` | local recipes only; substitutions and global search return empty |
+| pass camera | `pass_photo` writes placeholder files and records the slot; the chain stays complete |
+| temperature probes | manual readings via `the-pass temp`, or the mock sensor |
+| Flask | CLI and Telegram still work; `serve` logs that web surfaces are unavailable |
+| any module | the agent ticks the rest and reports the error for that module only |
 
-Curated ingredient lists, purchase orders, and any externally-shared conclusions
-each require explicit human approval through `review_queue` (12). This invariant
-is tested at every gate (prompts 04, 11, 12, 25, 28, 29).
+## Testing
+
+316 tests, no network, no hardware, ~30s on a Jetson Orin Nano. Mock vision
+(filenames are the fixture), mock sensors (a fixed sequence), in-memory SQLite
+per test, and a full simulated service day in `tests/fixtures/service_sim.py`.

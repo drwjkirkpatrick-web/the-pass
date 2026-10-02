@@ -110,7 +110,8 @@ def test_orders_curate_then_pending_then_approve(kitchen, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["queued_for_review"]
 
-    assert run_cli(kitchen, "orders", "--pending", "--json") == EXIT_OK
+    # exit 2: something is waiting on a human, and the exit code says so
+    assert run_cli(kitchen, "orders", "--pending", "--json") == EXIT_BLOCKED
     pending = json.loads(capsys.readouterr().out)["pending_reviews"]
     assert pending
 
@@ -122,6 +123,23 @@ def test_orders_curate_then_pending_then_approve(kitchen, capsys):
 
     assert run_cli(kitchen, "orders", "--export", approved[0].id) == EXIT_OK
     assert "PURCHASE ORDER" in capsys.readouterr().out
+
+
+def test_orders_json_shape_is_stable_when_nothing_is_pending(kitchen, capsys):
+    assert run_cli(kitchen, "orders", "--curate", "--json") == EXIT_BLOCKED
+    capsys.readouterr()
+    pending = json.loads(run_cli(kitchen, "orders", "--pending", "--json")
+                         and capsys.readouterr().out)["pending_reviews"]
+    for item in pending:
+        run_cli(kitchen, "orders", "--approve", item["id"])
+        capsys.readouterr()
+
+    assert run_cli(kitchen, "orders", "--json") == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    # both keys, always — even when there is nothing waiting
+    assert set(payload) == {"pending_reviews", "drafts"}
+    assert payload["pending_reviews"] == []
+    assert payload["drafts"] == []
 
 
 def test_review_blocks_while_plates_are_waiting(kitchen, capsys):

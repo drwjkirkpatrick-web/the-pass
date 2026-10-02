@@ -1,86 +1,115 @@
 🔥 # The Pass
 
-**A Hermes-powered restaurant agent that lives at the pass — helping one chef and one server earn a Michelin star.**
+**A Hermes-powered restaurant agent that lives at the pass — built to help one chef and one server earn a Michelin star.**
 
-The pass is where a kitchen wins or loses its night. Every plate crosses it; every
-fire, every 86, every "how long?" lands there. *The Pass* is a local-first agent
-that sits at that exact spot — watching ingredients, timing orders, guarding the
-cold chain, photographing plates, and keeping front and back of house in one
-conversation — so the two people it serves can focus on food and hospitality.
+The pass is where a kitchen wins or loses its night. Every plate crosses it; every fire, every 86, every "how long?" lands there. *The Pass* is a local-first agent that sits at that exact spot — watching ingredients, timing orders, guarding the cold chain, photographing plates, and keeping front and back of house in one conversation — so the two people it serves can put their whole attention on food and hospitality.
 
-This repository is the **framework**: the complete build contract for the agent,
-expressed as 30 numbered, testable build prompts in
-[`PROMPTS.md`](PROMPTS.md). Each prompt is self-contained — a fresh agent with
-zero context can execute one and produce a working, tested module.
+It runs on a Jetson in the corner, talks to you on Telegram, and keeps every number it reports traceable to something that actually happened in your kitchen.
+
+**Status:** fully implemented — 30 modules, 316 tests, one simulated service day end to end. Hardware still to come: the pass camera and the temperature probes (both are single adapters behind interfaces that already exist).
 
 ---
 
-## What the agent does
+## What it does
 
-**For the chef (back of house):**
-- 📷 Reviews photos of deliveries to curate the live ingredient list (human-approved, never automatic)
-- 📖 Lists recipes with exact portion scaling, and aggregates ingredient requirements from covers forecasts
-- 🚚 Learns each supplier's real delivery delay history and recommends **order-by dates days in advance** for day-before arrival
-- 🌡️ Logs temperatures against your own HACCP zone plan, with escalating excursion alerts
-- ⏲️ BOH reminders: prep timers, mise checks at T-minus, ordering deadlines
-- 🔁 Dish counter and dish-washing counter — the service heartbeat and the pit, both instrumented
+**For the chef (back of house)**
+- 📷 **Reads photos of what came in** and drafts an ingredient list — you approve or correct it, nothing lands in inventory on its own
+- 📖 **Scales recipes and adds up the whole menu**, so ordering starts from arithmetic instead of memory
+- 🚚 **Learns each supplier's real delivery record** and tells you the day to order so it lands the day before you need it (it plans against their *p90* delay, not their average — you order early to survive the bad delivery, not the typical one)
+- 🌡️ **Logs temperatures against your own HACCP zones**; two breaches in a row becomes an urgent call to the kitchen
+- ⏲️ **Prep timers, mise checks, order cutoffs, delivery windows** — back-of-house reminders that know your service time
+- 🔁 **Counts plates and racks** — fired, plated, picked up, and what the pit is carrying
 
-**For the server/host (front of house):**
-- 🍽️ FOH reminders: briefings, sidework checklists, restock, VIP occasions
-- ⚠️ 86 warnings *before* the dish has to be pulled — straight from live inventory
-- 💬 A structured urgent / non-urgent communication line to the kitchen (urgent requires an ack)
+**For the server/host (front of house)**
+- 🍽️ **Briefings, sidework checklists, restock and occasion reminders** — from your own lists, never a preset
+- ⚠️ **86 warnings before you have to pull the dish**, straight from live inventory
+- 💬 **A two-lane line to the kitchen**: urgent calls (allergies, 86s, a plate dying) need an acknowledgement and repeat until they get one; everything else queues into a digest so nobody is interrupted for rosemary
 
-**For the star track:**
-- 📸 Photographs **every dish on the pass**, scored live in seconds on a phone at the pass
-- 📊 Nightly service journal — one 2-minute read covering pace, gaps, scores, temps, and the pit
-- 🎯 Consistency scoring and drift detection (portion, plating, timing, temperature) — because consistency is the fifth Michelin criterion
-- ⭐ A Michelin dashboard that grounds all five official criteria in the restaurant's own evidence, with one honest focus recommendation — never an invented score
+**For the star track**
+- 📸 **Photographs every dish on the pass**, linked to the plate and the ticket
+- 📱 **Live dish review** — score a plate in seconds on a phone; the trend is what tells you whether tonight looked like last night
+- 📓 **A nightly service journal** — one page, two minutes: covers, pace, plate scores, cold chain, the pit, the urgent calls
+- 🎯 **Consistency scoring and drift detection**, because consistency is the fifth criterion and the one a kitchen cannot feel from the inside
+- ⭐ **A five-criteria dashboard** (ingredients, technique, personality, value, consistency) where every signal is computed from your records and the agent says plainly what the data shows — it never tells you a star is coming
 
-**Three kanban boards, one kitchen:** a Cuisine board for the chef (R&D → Testing → On Menu → 86'd), an Operations board the agent keeps stocked with its own escalations, and a Hospitality board for the server/host.
+**Three boards, one kitchen:** *Cuisine* for the chef (R&D → Testing → On Menu → 86'd), *Operations* for the agent (its own queue: approvals waiting, temperature trouble, order windows closing today, dishes drifting), and *Hospitality* for the server/host.
 
-**And it talks to you:** the agent runs inside Hermes on Telegram — ask "how's the pit?", say "86 the risotto", check order status, all from your phone.
+**And it answers the phone:** the agent runs inside Hermes on Telegram.
 
-## Design principles
+```
+86 the scallops        → pulled from inventory, floor warned, urgent line notified
+how's the pit          → open racks, throughput, peak hour
+order status           → what is waiting on your approval
+show me tonight        → the plan, the shortfalls, what to use first
+temps / journal / michelin / ack <id>
+```
 
-1. **The human is always the gate.** The agent drafts — orders, ingredient approvals, conclusions — a person approves. Every food-and-money decision has a review step, and that invariant is unit-tested.
-2. **No invented data.** Every score, grade, and recommendation cites evidence rows from the restaurant's own logs.
-3. **Local-first, mock-first.** SQLite, stdlib where possible, deterministic mocks for vision/sensors/gateway — the whole suite runs offline in under a minute on a Jetson.
-4. **No hardcoded restaurant content.** Recipes, suppliers, zones, checklists, and VIP notes are your data; the agent provides the structure.
-5. **Degrade gracefully.** Missing global recipe DB, missing sensor, missing module — the agent logs and keeps working with what's present.
+## Two rules it never breaks
+
+1. **The human is the gate.** The agent drafts; a person approves. Orders cannot be approved from chat, no code path can turn a draft into an approved order, and that invariant has its own tests.
+2. **No invented data.** Every grade, score and recommendation cites rows from your own records. When there is not enough history to say anything useful, it says that instead of guessing.
 
 ## Quick start
 
 ```bash
 git clone https://github.com/drwjkirkpatrick-web/the-pass.git
 cd the-pass
-open PROMPTS.md        # the build contract — start at Prompt 01
+
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt     # Flask is optional; the agent runs without it
+
+# one beat — what the agent knows right now
+.venv/bin/python cli.py --db data/the_pass.db status
+
+# define your temperature zones, then log a reading
+.venv/bin/python cli.py --db data/the_pass.db temp --init-zones
+.venv/bin/python cli.py --db data/the_pass.db temp --zone z-walkin --c 3.0
+
+# plan a service: {"recipe-id": covers}
+.venv/bin/python cli.py --db data/the_pass.db plan --covers '{"r-rib": 40}'
+
+# curate purchase orders (exits 2: they are drafts until you approve them)
+.venv/bin/python cli.py --db data/the_pass.db orders --curate
+.venv/bin/python cli.py --db data/the_pass.db orders --pending
+.venv/bin/python cli.py --db data/the_pass.db orders --approve <review-id>
+
+# the web surfaces (live dish review + the five criteria)
+.venv/bin/python cli.py --db data/the_pass.db serve   # http://127.0.0.1:8788
 ```
 
-The build order, dependency table, and per-phase acceptance criteria are all in
-[`PROMPTS.md`](PROMPTS.md). Current status lives in
-[`Project_state.md`](Project_state.md).
+Exit codes are a contract: **0** done, **1** usage error, **2** blocked — a human
+has to decide something (`orders --curate`, `orders --pending`,
+`review --pending`, an out-of-bounds temperature reading, an unapproved
+ingredient draft). Cron and shell scripts can tell the difference between "fine"
+and "waiting on you" without parsing text.
 
-## Repository layout
+Day-to-day operation lives in [`docs/RUNBOOK.md`](docs/RUNBOOK.md); a new team member can be productive in one shift with [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
+
+## How it is built
+
+The build contract is [`PROMPTS.md`](PROMPTS.md): **30 numbered, testable prompts** across 9 phases, each one a self-contained brief with its own files, dependencies and acceptance criteria. That is also how it was built — one prompt at a time, tests green, commit, next.
 
 ```
-the-pass/
-├── PROMPTS.md            # 30 build prompts — the heart of this repo
-├── Project_state.md     # living status: done / in progress / next step
-├── docs/
-│   └── ARCHITECTURE.md  # module graph, event routing, three data chains
-└── (code lands here as prompts are executed)
+core/      types, config, SQLite schema, event bus, agent clock
+modules/   the 22 working modules (ingredients → recipes → ordering → kitchen
+           → pass → boards → journal → drift → criteria)
+main.py    composition root; every module optional, none required except core/
+cli.py     the command surface (thin: no business logic)
+hermes_bridge.py  Telegram intent routing
+tests/     316 tests, mocks everywhere, offline in ~30s
 ```
 
-## The three data chains
+Design decisions worth knowing:
+- **Mock-first.** Vision, sensors and the messaging gateway all have deterministic mocks, so the whole suite runs offline and a missing camera is never a blocker.
+- **Degrade, never abort.** A missing global recipe database, a dead sensor, no Flask — the agent logs it and keeps working.
+- **No hardcoded restaurant content.** Recipes, suppliers, zones, sidework and occasions are your data. The agent supplies structure and arithmetic.
+- **One shared reminder engine**, one event bus, one SQLite schema — so behaviour is consistent across the CLI, the web app and Telegram.
 
-- **Ingredient chain:** photo → curated draft → human approval → inventory → recipe scaling → shortfall → dated order draft → human approval → PO
-- **Plate chain:** fire → plated (photographed) → picked up → scored → journal → drift report
-- **Order chain:** covers forecast → requirements → delay model → order-by date → review queue → export
+## Testing
 
-## Contributing
-
-Execute one prompt at a time, test-first, in phase order. Pointers in
-`PROMPTS.md` → "Testing Strategy".
+```bash
+.venv/bin/python -m pytest tests/ -q          # 316 passed
+```
 
 ## License
 

@@ -1,0 +1,7 @@
+# The Pass runs on the Python standard library.
+# Flask is only needed for the optional web surfaces (live dish review + the
+# five-criteria dashboard); the CLI and the Telegram bridge work without it.
+flask>=2.0
+
+# Development only
+pytest>=7.0

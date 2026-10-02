@@ -158,14 +158,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             # nothing can be sent until a person approves
             return EXIT_BLOCKED if queued else EXIT_OK
         pending = queue.pending()
-        if args.pending or not pending:
-            _print({"pending_reviews": [
-                {"id": i.id, "summary": i.summary, "deadline": i.deadline}
-                for i in pending]}, args.json)
-            return EXIT_OK
-        _print({"pending_reviews": [i.summary for i in pending],
-                "drafts": [o.id for o in ordering.orders(status="draft")]}, args.json)
-        return EXIT_BLOCKED
+        drafts = [o.id for o in ordering.orders(status="draft")]
+        payload = {
+            "pending_reviews": [{"id": i.id, "summary": i.summary,
+                                 "deadline": i.deadline} for i in pending],
+            "drafts": drafts,
+        }
+        _print(payload, args.json)
+        # NOTE: the same shape either way — a machine-readable command whose keys
+        # appear and disappear is a trap for whatever is parsing it.
+        return EXIT_BLOCKED if pending else EXIT_OK
 
     if args.command == "temp":
         templog = agent.get("templog")
